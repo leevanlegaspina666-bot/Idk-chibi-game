@@ -2,7 +2,6 @@ name: Build Chibi Shark Pet APK
 
 on:
   workflow_dispatch:
-
   push:
     branches:
       - main
@@ -17,38 +16,38 @@ jobs:
 
     steps:
 
-      # ======================================================
-      # CHECKOUT
-      # ======================================================
+      # ============================================================
+      # 1. GET OUR PROJECT
+      # ============================================================
 
-      - name: Checkout repository
+      - name: Checkout project
         uses: actions/checkout@v4
 
 
-      # ======================================================
-      # PYTHON
-      # ======================================================
+      # ============================================================
+      # 2. PYTHON
+      # ============================================================
 
-      - name: Set up Python
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
 
-      # ======================================================
-      # JAVA
-      # ======================================================
+      # ============================================================
+      # 3. JAVA
+      # ============================================================
 
-      - name: Set up Java
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
 
-      # ======================================================
-      # SYSTEM DEPENDENCIES
-      # ======================================================
+      # ============================================================
+      # 4. ANDROID / BUILD DEPENDENCIES
+      # ============================================================
 
       - name: Install system dependencies
         run: |
@@ -75,9 +74,9 @@ jobs:
             gettext
 
 
-      # ======================================================
-      # INSTALL BUILDOZER
-      # ======================================================
+      # ============================================================
+      # 5. HOST BUILD TOOLS
+      # ============================================================
 
       - name: Install Buildozer
         run: |
@@ -90,32 +89,179 @@ jobs:
             "setuptools<70"
 
 
-      # ======================================================
-      # VERIFY HOST TOOLS
-      # ======================================================
+      # ============================================================
+      # 6. VERIFY HOST ENVIRONMENT
+      # ============================================================
 
-      - name: Check host tools
+      - name: Check build tools
         run: |
+          echo "========================================"
+          echo "HOST ENVIRONMENT"
+          echo "========================================"
+
           python --version
-          pip --version
+          python -m pip --version
           virtualenv --version
           cython --version
           buildozer --version
 
+          echo
+          echo "Java:"
+          java -version
 
-      # ======================================================
-      # CLEAN EVERYTHING
-      # ======================================================
+          echo
+          echo "Git:"
+          git --version
+
+
+      # ============================================================
+      # 7. CLEAN EVERYTHING FROM PREVIOUS BUILDS
+      # ============================================================
 
       - name: Clean Buildozer
         run: |
           rm -rf .buildozer
           rm -rf bin
 
+          # Remove any accidentally cached p4a source
+          rm -rf p4a-local
 
-      # ======================================================
-      # PREPARE PIP CACHE VARIABLES
-      # ======================================================
+
+      # ============================================================
+      # 8. DOWNLOAD A FRESH PYTHON-FOR-ANDROID
+      #
+      # This avoids relying on an old/corrupted p4a checkout.
+      # ============================================================
+
+      - name: Get fresh python-for-android
+        run: |
+          git clone \
+            --depth 1 \
+            --branch develop \
+            https://github.com/kivy/python-for-android.git \
+            p4a-local
+
+          echo "========================================"
+          echo "PYTHON-FOR-ANDROID VERSION"
+          echo "========================================"
+
+          cd p4a-local
+
+          git rev-parse HEAD
+          git log -1 --oneline
+
+
+      # ============================================================
+      # 9. PATCH p4a VENV CREATION
+      #
+      # The failing build creates:
+      #
+      #   build/venv
+      #
+      # and then upgrades pip inside it.
+      #
+      # --clear prevents stale/mixed pip files.
+      # ============================================================
+
+      - name: Patch python-for-android pip environment
+        shell: bash
+        run: |
+          set -e
+
+          FILE="p4a-local/pythonforandroid/build.py"
+
+          echo "========================================"
+          echo "PATCHING p4a"
+          echo "========================================"
+
+          if [ ! -f "$FILE" ]; then
+            echo "ERROR: pythonforandroid/build.py was not found."
+            exit 1
+          fi
+
+          echo "Before patch:"
+          grep -n -A3 -B3 "host_python.*venv" "$FILE" || true
+
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("p4a-local/pythonforandroid/build.py")
+          text = path.read_text()
+
+          old = "shprint(host_python, '-m', 'venv', 'venv')"
+          new = "shprint(host_python, '-m', 'venv', '--clear', 'venv')"
+
+          if old in text:
+              text = text.replace(old, new, 1)
+              path.write_text(text)
+              print("SUCCESS: Added --clear to p4a venv creation.")
+          elif new in text:
+              print("p4a already contains the --clear fix.")
+          else:
+              print("WARNING: Could not find the expected venv line.")
+              print("The workflow will continue so the build log can show the current p4a code.")
+          PY
+
+          echo
+          echo "After patch:"
+          grep -n -A3 -B3 "host_python.*venv" "$FILE" || true
+
+
+      # ============================================================
+      # 10. INSTALL LOCAL p4a
+      #
+      # buildozer.spec will be temporarily pointed at this checkout.
+      # ============================================================
+
+      - name: Install patched python-for-android
+        run: |
+          python -m pip install \
+            --upgrade \
+            --editable ./p4a-local
+
+
+      # ============================================================
+      # 11. POINT BUILDOZER AT OUR PATCHED p4a
+      # ============================================================
+
+      - name: Configure Buildozer to use patched p4a
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("buildozer.spec")
+          text = path.read_text()
+
+          lines = text.splitlines()
+
+          # Remove existing p4a.source_dir if present.
+          lines = [
+              line for line in lines
+              if not line.strip().startswith("p4a.source_dir")
+          ]
+
+          # Add our local patched p4a source.
+          lines.append("")
+          lines.append("# GitHub Actions: use patched python-for-android")
+          lines.append("p4a.source_dir = ./p4a-local")
+
+          path.write_text("\n".join(lines) + "\n")
+
+          print("Configured buildozer.spec:")
+          print("p4a.source_dir = ./p4a-local")
+          PY
+
+          echo
+          echo "========================================"
+          echo "p4a CONFIGURATION"
+          echo "========================================"
+
+          grep -n "p4a." buildozer.spec || true
+
+
+      # ============================================================
+      # 12. PIP SETTINGS
+      # ============================================================
 
       - name: Configure pip
         run: |
@@ -123,33 +269,76 @@ jobs:
           echo "PIP_NO_CACHE_DIR=1" >> "$GITHUB_ENV"
 
 
-      # ======================================================
-      # BUILD APK
-      # ======================================================
+      # ============================================================
+      # 13. FINAL PROJECT CHECK
+      # ============================================================
+
+      - name: Check project files
+        run: |
+          echo "========================================"
+          echo "PROJECT FILES"
+          echo "========================================"
+
+          echo
+          echo "Root:"
+          ls -lah
+
+          echo
+          echo "Assets:"
+          find assets -maxdepth 1 -type f -print | sort
+
+          echo
+          echo "Sprite count:"
+          find assets -maxdepth 1 -type f \
+            \( -name "*.png" -o -name "*.jpg" -o -name "*.jpeg" \) \
+            | wc -l
+
+          echo
+          echo "main.py:"
+          test -f main.py
+
+          echo
+          echo "buildozer.spec:"
+          test -f buildozer.spec
+
+
+      # ============================================================
+      # 14. BUILD APK
+      # ============================================================
 
       - name: Build Android APK
         run: |
+          echo "========================================"
+          echo "STARTING ANDROID BUILD"
+          echo "========================================"
+
           buildozer -v android debug
 
 
-      # ======================================================
-      # SHOW APK
-      # ======================================================
+      # ============================================================
+      # 15. FIND APK
+      # ============================================================
 
       - name: Find APK
+        if: always()
         run: |
           echo "========================================"
           echo "BUILD OUTPUT"
           echo "========================================"
 
-          find bin -type f -name "*.apk" -print
+          if [ -d bin ]; then
+            find bin -type f -name "*.apk" -print
+          else
+            echo "bin/ does not exist."
+          fi
 
 
-      # ======================================================
-      # UPLOAD APK
-      # ======================================================
+      # ============================================================
+      # 16. UPLOAD APK
+      # ============================================================
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: ChibiSharkPet-APK
