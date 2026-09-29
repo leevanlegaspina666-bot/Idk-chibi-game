@@ -8,7 +8,7 @@ version = 1.0.0
 source.dir = .
 source.include_exts = py,png,jpg,jpeg,kv,atlas,ttf,txt
 source.exclude_exts = spec
-source.exclude_dirs = .git,.github,bin,.buildozer,__pycache__
+source.exclude_dirs = .git,.github,bin,.buildozer,__pycache__,p4a-local
 
 requirements = python3==3.11.9,hostpython3==3.11.9,kivy==2.3.1
 
@@ -33,7 +33,7 @@ android.permissions =
 
 p4a.fork = kivy
 p4a.branch = master
-p4a.commit = 5865575
+p4a.source_dir = ./p4a-local
 p4a.bootstrap = sdl2
 
 android.presplash_color = #101010
