@@ -1,3 +1,4 @@
+```yaml
 name: Build Chibi Shark Pet APK
 
 on:
@@ -90,7 +91,7 @@ jobs:
 
 
       # ============================================================
-      # 6. CHECK HOST TOOLS
+      # 6. CHECK BUILD ENVIRONMENT
       # ============================================================
 
       - name: Check build environment
@@ -125,143 +126,28 @@ jobs:
 
 
       # ============================================================
-      # 7. CLEAN PREVIOUS BUILDS
+      # 7. CLEAN OLD BUILDS
       # ============================================================
 
       - name: Clean Buildozer
         run: |
           rm -rf .buildozer
           rm -rf bin
-          rm -rf p4a-local
 
 
       # ============================================================
-      # 8. DOWNLOAD FIXED PYTHON-FOR-ANDROID
+      # 8. FORCE BUILDOZER TO USE FIXED P4A
       #
-      # Commit 5865575:
+      # Commit:
+      # 5865575d81d53617784428ee29f57be2716311ea
+      #
       # "Remove venv creation for python package install stage"
       #
-      # This directly addresses the broken temporary pip/venv
-      # stage that produced:
-      #
-      # ImportError: cannot import name 'open_rich_spinner'
-      # ============================================================
-
-      - name: Download fixed python-for-android
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "DOWNLOADING PYTHON-FOR-ANDROID"
-          echo "========================================"
-
-          git clone \
-            --filter=blob:none \
-            https://github.com/kivy/python-for-android.git \
-            p4a-local
-
-          cd p4a-local
-
-          git checkout 5865575
-
-          echo
-          echo "========================================"
-          echo "P4A COMMIT"
-          echo "========================================"
-
-          git rev-parse HEAD
-
-
-      # ============================================================
-      # 9. VERIFY THE EXACT P4A VERSION
-      #
       # IMPORTANT:
-      # Do NOT compare the full 40-character hash to "5865575".
-      # We check the beginning of the full hash instead.
+      # We let Buildozer perform the checkout itself.
       # ============================================================
 
-      - name: Verify fixed python-for-android
-        shell: bash
-        run: |
-          set -e
-
-          cd p4a-local
-
-          echo "========================================"
-          echo "VERIFYING P4A"
-          echo "========================================"
-
-          COMMIT="$(git rev-parse HEAD)"
-
-          echo "Full commit:"
-          echo "$COMMIT"
-
-          if [[ "$COMMIT" != 5865575* ]]; then
-            echo
-            echo "ERROR: The wrong p4a commit was checked out."
-            exit 1
-          fi
-
-          echo
-          echo "SUCCESS: Correct p4a commit is installed."
-
-
-      # ============================================================
-      # 10. VERIFY THE ACTUAL FIX
-      #
-      # The fixed commit removes the old temporary venv creation
-      # from the Python package installation stage.
-      #
-      # We also make sure the exact crashing command is absent.
-      # ============================================================
-
-      - name: Verify p4a pip fix
-        shell: bash
-        run: |
-          set -e
-
-          FILE="p4a-local/pythonforandroid/build.py"
-
-          echo "========================================"
-          echo "VERIFYING P4A BUILD CODE"
-          echo "========================================"
-
-          test -f "$FILE"
-
-          echo
-          echo "Checking for old pip self-upgrade..."
-
-          if grep -q "pip install -U pip" "$FILE"; then
-            echo
-            echo "ERROR: The broken pip self-upgrade is still present."
-            echo
-            grep -n -B3 -A5 "pip install -U pip" "$FILE" || true
-            exit 1
-          fi
-
-          echo
-          echo "SUCCESS: The old pip self-upgrade is absent."
-
-          echo
-          echo "Checking for old temporary venv creation..."
-
-          if grep -q "host_python.*-m.*venv.*'venv'" "$FILE"; then
-            echo
-            echo "WARNING: A venv reference still exists in build.py."
-            echo "This may be unrelated to the package-install stage."
-            echo
-          else
-            echo "No old package-install venv creation found."
-          fi
-
-
-      # ============================================================
-      # 11. CONFIGURE BUILDOZER
-      #
-      # Buildozer officially supports p4a.source_dir.
-      # ============================================================
-
-      - name: Configure Buildozer p4a source
+      - name: Configure fixed python-for-android
         run: |
           set -e
 
@@ -281,41 +167,54 @@ jobs:
 
           for line in text.splitlines():
 
-              # Remove any old p4a.source_dir.
+              # Remove anything previously added for p4a source.
               if line.strip().startswith("p4a.source_dir"):
+                  continue
+
+              # Remove an old p4a.commit so we can replace it.
+              if line.strip().startswith("p4a.commit"):
                   continue
 
               lines.append(line)
 
-          lines.append("")
-          lines.append("# GitHub Actions: fixed python-for-android")
-          lines.append("p4a.source_dir = ./p4a-local")
+          # Find the [app] section and insert p4a.commit there.
+          output = []
+          inserted = False
+
+          for line in lines:
+
+              output.append(line)
+
+              if (
+                  line.strip() == "p4a.branch = master"
+                  and not inserted
+              ):
+                  output.append(
+                      "p4a.commit = 5865575"
+                  )
+                  inserted = True
+
+          if not inserted:
+              raise SystemExit(
+                  "ERROR: Could not find "
+                  "'p4a.branch = master' in buildozer.spec."
+              )
 
           path.write_text(
-              "\n".join(lines) + "\n"
+              "\n".join(output) + "\n"
           )
           PY
 
           echo
           echo "========================================"
-          echo "BUILDOZER P4A CONFIGURATION"
+          echo "P4A CONFIGURATION"
           echo "========================================"
 
           grep -n "p4a." buildozer.spec
 
 
       # ============================================================
-      # 12. PIP SETTINGS
-      # ============================================================
-
-      - name: Configure pip
-        run: |
-          echo "PIP_DISABLE_PIP_VERSION_CHECK=1" >> "$GITHUB_ENV"
-          echo "PIP_NO_CACHE_DIR=1" >> "$GITHUB_ENV"
-
-
-      # ============================================================
-      # 13. CHECK PROJECT
+      # 9. VERIFY PROJECT
       # ============================================================
 
       - name: Check project
@@ -339,11 +238,7 @@ jobs:
           ls -lh buildozer.spec
 
           echo
-          echo "Assets:"
-          find assets -maxdepth 1 -type f -print | sort
-
-          echo
-          echo "Image count:"
+          echo "Asset count:"
 
           find assets -maxdepth 1 -type f \
             \( \
@@ -354,7 +249,17 @@ jobs:
 
 
       # ============================================================
-      # 14. BUILD APK
+      # 10. CONFIGURE PIP
+      # ============================================================
+
+      - name: Configure pip
+        run: |
+          echo "PIP_DISABLE_PIP_VERSION_CHECK=1" >> "$GITHUB_ENV"
+          echo "PIP_NO_CACHE_DIR=1" >> "$GITHUB_ENV"
+
+
+      # ============================================================
+      # 11. BUILD APK
       # ============================================================
 
       - name: Build Android APK
@@ -367,7 +272,53 @@ jobs:
 
 
       # ============================================================
-      # 15. FIND APK
+      # 12. VERIFY WHICH P4A WAS ACTUALLY USED
+      # ============================================================
+
+      - name: Verify built p4a
+        if: always()
+        shell: bash
+        run: |
+          echo "========================================"
+          echo "CHECKING BUILDOZER P4A"
+          echo "========================================"
+
+          P4A_DIR=".buildozer/android/platform/python-for-android"
+
+          if [ -d "$P4A_DIR/.git" ]; then
+
+            echo
+            echo "P4A directory found:"
+            echo "$P4A_DIR"
+
+            echo
+            echo "Actual p4a commit:"
+
+            git -C "$P4A_DIR" rev-parse HEAD
+
+            echo
+            echo "Expected commit prefix:"
+            echo "5865575"
+
+            COMMIT="$(git -C "$P4A_DIR" rev-parse HEAD)"
+
+            if [[ "$COMMIT" == 5865575* ]]; then
+              echo
+              echo "SUCCESS: Buildozer used the fixed p4a commit."
+            else
+              echo
+              echo "WARNING: Buildozer did not use commit 5865575."
+            fi
+
+          else
+
+            echo "P4A directory was not created."
+
+          fi
+
+
+      # ============================================================
+      # 13. FIND APK
       # ============================================================
 
       - name: Find APK
@@ -378,14 +329,21 @@ jobs:
           echo "========================================"
 
           if [ -d bin ]; then
-            find bin -type f -name "*.apk" -print
+
+            find bin \
+              -type f \
+              -name "*.apk" \
+              -print
+
           else
+
             echo "No bin directory was created."
+
           fi
 
 
       # ============================================================
-      # 16. UPLOAD APK
+      # 14. UPLOAD APK
       # ============================================================
 
       - name: Upload APK
@@ -395,3 +353,4 @@ jobs:
           name: ChibiSharkPet-APK
           path: bin/*.apk
           if-no-files-found: error
+```
