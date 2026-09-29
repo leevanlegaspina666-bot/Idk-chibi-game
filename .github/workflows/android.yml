@@ -16,13 +16,28 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
+
+      # ======================================================
+      # CHECK OUT PROJECT
+      # ======================================================
+
       - name: Checkout repository
         uses: actions/checkout@v4
+
+
+      # ======================================================
+      # PYTHON FOR BUILDOZER
+      # ======================================================
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+
+      # ======================================================
+      # JAVA
+      # ======================================================
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -30,7 +45,12 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Install Android build dependencies
+
+      # ======================================================
+      # ANDROID / BUILDOZER DEPENDENCIES
+      # ======================================================
+
+      - name: Install build dependencies
         run: |
           sudo apt-get update
 
@@ -48,15 +68,16 @@ jobs:
             zlib1g-dev \
             libncurses5-dev \
             libncursesw5-dev \
+            libtinfo6 \
             libffi-dev \
-            libssl-dev
+            libssl-dev \
+            autopoint \
+            gettext
 
-      - name: Refresh autotools
-        run: |
-          libtoolize --version
-          autoreconf --version
-          automake --version
-          autoconf --version
+
+      # ======================================================
+      # INSTALL BUILDOZER
+      # ======================================================
 
       - name: Install Buildozer
         run: |
@@ -64,14 +85,39 @@ jobs:
           python -m pip install "cython<3.4"
           python -m pip install buildozer
 
-      - name: Build debug APK
+
+      # ======================================================
+      # CLEAN OLD BUILDS
+      # ======================================================
+
+      - name: Clean Buildozer cache
+        run: |
+          rm -rf .buildozer
+          rm -rf bin
+
+
+      # ======================================================
+      # BUILD APK
+      # ======================================================
+
+      - name: Build Android APK
         run: |
           buildozer -v android debug
 
-      - name: Show APK
+
+      # ======================================================
+      # FIND APK
+      # ======================================================
+
+      - name: Find APK
         run: |
           echo "APK files:"
           find bin -type f -name "*.apk" -print
+
+
+      # ======================================================
+      # UPLOAD APK TO GITHUB
+      # ======================================================
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
