@@ -15,10 +15,15 @@ jobs:
     name: Build Android APK
     runs-on: ubuntu-22.04
 
+    env:
+      # Use an NDK version that is compatible with the
+      # Python 3.12 Android build.
+      ANDROID_NDK_VERSION: "27c"
+
     steps:
 
       # ======================================================
-      # CHECK OUT PROJECT
+      # CHECKOUT
       # ======================================================
 
       - name: Checkout repository
@@ -26,7 +31,7 @@ jobs:
 
 
       # ======================================================
-      # PYTHON FOR BUILDOZER
+      # PYTHON
       # ======================================================
 
       - name: Set up Python
@@ -47,7 +52,7 @@ jobs:
 
 
       # ======================================================
-      # ANDROID / BUILDOZER DEPENDENCIES
+      # BUILD DEPENDENCIES
       # ======================================================
 
       - name: Install build dependencies
@@ -76,7 +81,7 @@ jobs:
 
 
       # ======================================================
-      # INSTALL BUILDOZER
+      # BUILDOZER
       # ======================================================
 
       - name: Install Buildozer
@@ -87,7 +92,7 @@ jobs:
 
 
       # ======================================================
-      # CLEAN OLD BUILDS
+      # CLEAN OLD BUILD
       # ======================================================
 
       - name: Clean Buildozer cache
@@ -101,6 +106,8 @@ jobs:
       # ======================================================
 
       - name: Build Android APK
+        env:
+          P4A_NDK_VERSION: "27c"
         run: |
           buildozer -v android debug
 
@@ -116,7 +123,7 @@ jobs:
 
 
       # ======================================================
-      # UPLOAD APK TO GITHUB
+      # UPLOAD APK
       # ======================================================
 
       - name: Upload APK
