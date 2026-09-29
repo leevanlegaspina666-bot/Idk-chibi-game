@@ -15,13 +15,16 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
+
       - name: Checkout project
         uses: actions/checkout@v4
+
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -29,9 +32,11 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Install dependencies
+
+      - name: Install system dependencies
         run: |
           sudo apt-get update
+
           sudo apt-get install -y \
             git \
             zip \
@@ -51,47 +56,142 @@ jobs:
             autopoint \
             gettext
 
+
       - name: Install Buildozer
         run: |
           python -m pip install --upgrade pip
+
           python -m pip install \
             "buildozer==1.5.0" \
             "cython==3.0.11" \
             "virtualenv==20.31.2" \
             "setuptools<70"
 
-      - name: Check project
-        run: |
-          set -e
-
-          test -f main.py
-          test -f buildozer.spec
-          test -d assets
-
-          echo "Project files found."
-          echo "Assets:"
-          find assets -maxdepth 1 -type f | wc -l
 
       - name: Clean old build
         run: |
           rm -rf .buildozer
           rm -rf bin
+          rm -rf p4a-local
+
+
+      # ============================================================
+      # DOWNLOAD THE FULL P4A REPOSITORY
+      #
+      # We intentionally do NOT use a shallow checkout here.
+      # Buildozer needs the requested commit to exist locally.
+      # ============================================================
+
+      - name: Download fixed python-for-android
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "DOWNLOADING PYTHON-FOR-ANDROID"
+          echo "========================================"
+
+          git clone \
+            https://github.com/kivy/python-for-android.git \
+            p4a-local
+
+          cd p4a-local
+
+          git checkout 5865575d81d53617784428ee29f57be2716311ea
+
+          echo
+          echo "P4A COMMIT:"
+          git rev-parse HEAD
+
+
+      # ============================================================
+      # VERIFY P4A
+      # ============================================================
+
+      - name: Verify fixed python-for-android
+        run: |
+          set -e
+
+          cd p4a-local
+
+          COMMIT="$(git rev-parse HEAD)"
+
+          echo "========================================"
+          echo "P4A COMMIT"
+          echo "========================================"
+
+          echo "$COMMIT"
+
+          if [ "$COMMIT" != "5865575d81d53617784428ee29f57be2716311ea" ]; then
+            echo "ERROR: Wrong p4a commit."
+            exit 1
+          fi
+
+          echo
+          echo "Correct p4a commit confirmed."
+
+
+      # ============================================================
+      # CHECK PROJECT
+      # ============================================================
+
+      - name: Check project
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "PROJECT CHECK"
+          echo "========================================"
+
+          test -f main.py
+          test -f buildozer.spec
+          test -d assets
+
+          echo "main.py: OK"
+          echo "buildozer.spec: OK"
+          echo "assets: OK"
+
+          echo
+          echo "Asset count:"
+
+          find assets -maxdepth 1 -type f \
+            \( \
+              -name "*.png" \
+              -o -name "*.jpg" \
+              -o -name "*.jpeg" \
+            \) | wc -l
+
+
+      # ============================================================
+      # SHOW CONFIGURATION
+      # ============================================================
 
       - name: Show Buildozer configuration
         run: |
           echo "========================================"
-          echo "BUILDOZER SPEC"
+          echo "P4A CONFIGURATION"
           echo "========================================"
 
-          grep -n "p4a\." buildozer.spec || true
+          grep -n "p4a\." buildozer.spec
 
-      - name: Build APK
+
+      # ============================================================
+      # BUILD
+      # ============================================================
+
+      - name: Build Android APK
         run: |
+          set -e
+
           echo "========================================"
-          echo "STARTING APK BUILD"
+          echo "STARTING ANDROID APK BUILD"
           echo "========================================"
 
           buildozer -v android debug
+
+
+      # ============================================================
+      # FIND APK
+      # ============================================================
 
       - name: Find APK
         if: always()
@@ -105,6 +205,11 @@ jobs:
           else
             echo "No bin directory was created."
           fi
+
+
+      # ============================================================
+      # UPLOAD APK
+      # ============================================================
 
       - name: Upload APK
         if: success()
