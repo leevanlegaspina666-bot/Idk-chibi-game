@@ -75,13 +75,6 @@ jobs:
           rm -rf p4a-local
 
 
-      # ============================================================
-      # DOWNLOAD THE FULL P4A REPOSITORY
-      #
-      # We intentionally do NOT use a shallow checkout here.
-      # Buildozer needs the requested commit to exist locally.
-      # ============================================================
-
       - name: Download fixed python-for-android
         run: |
           set -e
@@ -102,10 +95,6 @@ jobs:
           echo "P4A COMMIT:"
           git rev-parse HEAD
 
-
-      # ============================================================
-      # VERIFY P4A
-      # ============================================================
 
       - name: Verify fixed python-for-android
         run: |
@@ -129,10 +118,6 @@ jobs:
           echo
           echo "Correct p4a commit confirmed."
 
-
-      # ============================================================
-      # CHECK PROJECT
-      # ============================================================
 
       - name: Check project
         run: |
@@ -161,22 +146,43 @@ jobs:
             \) | wc -l
 
 
-      # ============================================================
-      # SHOW CONFIGURATION
-      # ============================================================
-
       - name: Show Buildozer configuration
         run: |
           echo "========================================"
-          echo "P4A CONFIGURATION"
+          echo "BUILDOZER CONFIGURATION"
           echo "========================================"
+
+          grep -n "android.api" buildozer.spec
+          grep -n "android.minapi" buildozer.spec
+          grep -n "android.ndk" buildozer.spec
+          grep -n "android.ndk_api" buildozer.spec
+
+          echo
+          echo "P4A CONFIGURATION"
 
           grep -n "p4a\." buildozer.spec
 
 
-      # ============================================================
-      # BUILD
-      # ============================================================
+      - name: Verify NDK configuration
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "VERIFYING NDK"
+          echo "========================================"
+
+          NDK_LINE="$(grep '^android.ndk =' buildozer.spec)"
+
+          echo "$NDK_LINE"
+
+          if ! echo "$NDK_LINE" | grep -q "28c"; then
+            echo "ERROR: NDK is not set to 28c."
+            exit 1
+          fi
+
+          echo
+          echo "NDK 28c confirmed."
+
 
       - name: Build Android APK
         run: |
@@ -188,10 +194,6 @@ jobs:
 
           buildozer -v android debug
 
-
-      # ============================================================
-      # FIND APK
-      # ============================================================
 
       - name: Find APK
         if: always()
@@ -206,10 +208,6 @@ jobs:
             echo "No bin directory was created."
           fi
 
-
-      # ============================================================
-      # UPLOAD APK
-      # ============================================================
 
       - name: Upload APK
         if: success()
