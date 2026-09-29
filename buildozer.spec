@@ -17,7 +17,7 @@ fullscreen = 1
 
 android.api = 35
 android.minapi = 24
-android.ndk = 25b
+android.ndk = 28c
 android.ndk_api = 24
 
 android.archs = arm64-v8a,armeabi-v7a
@@ -28,7 +28,6 @@ android.entrypoint = org.kivy.android.PythonActivity
 android.debug_artifact = apk
 android.numeric_version = 1
 android.allow_backup = True
-
 android.permissions =
 
 p4a.fork = kivy
