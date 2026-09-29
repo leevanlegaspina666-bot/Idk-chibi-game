@@ -17,7 +17,7 @@ jobs:
     steps:
 
       # ============================================================
-      # 1. CHECKOUT YOUR PROJECT
+      # 1. CHECKOUT PROJECT
       # ============================================================
 
       - name: Checkout project
@@ -25,20 +25,20 @@ jobs:
 
 
       # ============================================================
-      # 2. PYTHON
+      # 2. PYTHON 3.11
       # ============================================================
 
-      - name: Set up Python 3.11
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
 
       # ============================================================
-      # 3. JAVA
+      # 3. JAVA 17
       # ============================================================
 
-      - name: Set up Java 17
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -125,10 +125,7 @@ jobs:
 
 
       # ============================================================
-      # 7. CLEAN ALL PREVIOUS BUILDS
-      #
-      # This is important because your previous failed p4a build
-      # created the corrupted build/venv that caused the error.
+      # 7. CLEAN PREVIOUS BUILDS
       # ============================================================
 
       - name: Clean Buildozer
@@ -141,12 +138,19 @@ jobs:
       # ============================================================
       # 8. DOWNLOAD FIXED PYTHON-FOR-ANDROID
       #
-      # 5865575 is the upstream commit that removed the problematic
-      # temporary Python venv from the package-install stage.
+      # Commit 5865575:
+      # "Remove venv creation for python package install stage"
+      #
+      # This directly addresses the broken temporary pip/venv
+      # stage that produced:
+      #
+      # ImportError: cannot import name 'open_rich_spinner'
       # ============================================================
 
       - name: Download fixed python-for-android
         run: |
+          set -e
+
           echo "========================================"
           echo "DOWNLOADING PYTHON-FOR-ANDROID"
           echo "========================================"
@@ -162,26 +166,22 @@ jobs:
 
           echo
           echo "========================================"
-          echo "P4A COMMIT BEING USED"
+          echo "P4A COMMIT"
           echo "========================================"
 
           git rev-parse HEAD
 
-          echo
-          echo "Expected:"
-          echo "5865575"
-
 
       # ============================================================
-      # 9. VERIFY THE FIXED P4A SOURCE
+      # 9. VERIFY THE EXACT P4A VERSION
       #
-      # We intentionally DO NOT patch the file.
-      #
-      # We verify that the checked-out version does not contain the
-      # old temporary-venv package-install sequence.
+      # IMPORTANT:
+      # Do NOT compare the full 40-character hash to "5865575".
+      # We check the beginning of the full hash instead.
       # ============================================================
 
       - name: Verify fixed python-for-android
+        shell: bash
         run: |
           set -e
 
@@ -193,41 +193,78 @@ jobs:
 
           COMMIT="$(git rev-parse HEAD)"
 
-          echo "Actual commit:"
+          echo "Full commit:"
           echo "$COMMIT"
 
-          if [ "$COMMIT" != "5865575" ]; then
-            echo "ERROR: Wrong p4a commit."
+          if [[ "$COMMIT" != 5865575* ]]; then
+            echo
+            echo "ERROR: The wrong p4a commit was checked out."
             exit 1
           fi
 
           echo
-          echo "Checking build.py..."
+          echo "SUCCESS: Correct p4a commit is installed."
 
-          test -f pythonforandroid/build.py
+
+      # ============================================================
+      # 10. VERIFY THE ACTUAL FIX
+      #
+      # The fixed commit removes the old temporary venv creation
+      # from the Python package installation stage.
+      #
+      # We also make sure the exact crashing command is absent.
+      # ============================================================
+
+      - name: Verify p4a pip fix
+        shell: bash
+        run: |
+          set -e
+
+          FILE="p4a-local/pythonforandroid/build.py"
+
+          echo "========================================"
+          echo "VERIFYING P4A BUILD CODE"
+          echo "========================================"
+
+          test -f "$FILE"
 
           echo
           echo "Checking for old pip self-upgrade..."
 
-          if grep -q "pip install -U pip" \
-            pythonforandroid/build.py; then
-
-            echo "ERROR: Old pip self-upgrade still exists."
+          if grep -q "pip install -U pip" "$FILE"; then
+            echo
+            echo "ERROR: The broken pip self-upgrade is still present."
+            echo
+            grep -n -B3 -A5 "pip install -U pip" "$FILE" || true
             exit 1
           fi
 
           echo
-          echo "SUCCESS:"
-          echo "The selected p4a version does not contain"
-          echo "the problematic pip self-upgrade."
+          echo "SUCCESS: The old pip self-upgrade is absent."
+
+          echo
+          echo "Checking for old temporary venv creation..."
+
+          if grep -q "host_python.*-m.*venv.*'venv'" "$FILE"; then
+            echo
+            echo "WARNING: A venv reference still exists in build.py."
+            echo "This may be unrelated to the package-install stage."
+            echo
+          else
+            echo "No old package-install venv creation found."
+          fi
 
 
       # ============================================================
-      # 10. TELL BUILDOZER TO USE THAT EXACT P4A CHECKOUT
+      # 11. CONFIGURE BUILDOZER
+      #
+      # Buildozer officially supports p4a.source_dir.
       # ============================================================
 
       - name: Configure Buildozer p4a source
         run: |
+          set -e
+
           python - <<'PY'
           from pathlib import Path
 
@@ -244,12 +281,8 @@ jobs:
 
           for line in text.splitlines():
 
-              # Remove an old p4a.source_dir if one exists.
+              # Remove any old p4a.source_dir.
               if line.strip().startswith("p4a.source_dir"):
-                  continue
-
-              # Remove old p4a.commit if one exists.
-              if line.strip().startswith("p4a.commit"):
                   continue
 
               lines.append(line)
@@ -272,7 +305,7 @@ jobs:
 
 
       # ============================================================
-      # 11. PIP SETTINGS
+      # 12. PIP SETTINGS
       # ============================================================
 
       - name: Configure pip
@@ -282,7 +315,7 @@ jobs:
 
 
       # ============================================================
-      # 12. CHECK YOUR PROJECT
+      # 13. CHECK PROJECT
       # ============================================================
 
       - name: Check project
@@ -321,20 +354,20 @@ jobs:
 
 
       # ============================================================
-      # 13. BUILD APK
+      # 14. BUILD APK
       # ============================================================
 
       - name: Build Android APK
         run: |
           echo "========================================"
-          echo "STARTING ANDROID BUILD"
+          echo "STARTING ANDROID APK BUILD"
           echo "========================================"
 
           buildozer -v android debug
 
 
       # ============================================================
-      # 14. FIND APK
+      # 15. FIND APK
       # ============================================================
 
       - name: Find APK
@@ -352,7 +385,7 @@ jobs:
 
 
       # ============================================================
-      # 15. UPLOAD APK
+      # 16. UPLOAD APK
       # ============================================================
 
       - name: Upload APK
