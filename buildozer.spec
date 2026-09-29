@@ -1,3 +1,4 @@
+```ini
 [app]
 
 title = Chibi Shark Pet
@@ -43,3 +44,4 @@ android.presplash_color = #101010
 
 log_level = 2
 warn_on_root = 1
+```
