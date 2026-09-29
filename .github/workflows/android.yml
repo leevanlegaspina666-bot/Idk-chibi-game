@@ -47,7 +47,7 @@ jobs:
 
 
       # ======================================================
-      # BUILD DEPENDENCIES
+      # SYSTEM DEPENDENCIES
       # ======================================================
 
       - name: Install dependencies
@@ -76,20 +76,36 @@ jobs:
 
 
       # ======================================================
-      # BUILDOZER
+      # INSTALL BUILDOZER
       # ======================================================
 
       - name: Install Buildozer
         run: |
           python -m pip install --upgrade pip
-          python -m pip install buildozer
+          python -m pip install "setuptools<70"
+          python -m pip install "virtualenv<21"
+          python -m pip install "cython==3.0.11"
+          python -m pip install "buildozer==1.5.0"
 
 
       # ======================================================
-      # FORCE CLEAN BUILD
+      # VERIFY BUILD TOOLS
       # ======================================================
 
-      - name: Clean old Buildozer files
+      - name: Show build tool versions
+        run: |
+          python --version
+          pip --version
+          virtualenv --version
+          cython --version
+          buildozer --version
+
+
+      # ======================================================
+      # CLEAN EVERYTHING
+      # ======================================================
+
+      - name: Clean Buildozer
         run: |
           rm -rf .buildozer
           rm -rf bin
@@ -100,17 +116,23 @@ jobs:
       # ======================================================
 
       - name: Build Android APK
+        env:
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
+          PIP_NO_CACHE_DIR: "1"
         run: |
           buildozer -v android debug
 
 
       # ======================================================
-      # VERIFY APK
+      # FIND APK
       # ======================================================
 
-      - name: Verify APK
+      - name: Find APK
         run: |
-          echo "Looking for APK..."
+          echo "======================================"
+          echo "APK OUTPUT"
+          echo "======================================"
+
           find bin -type f -name "*.apk" -print
 
 
