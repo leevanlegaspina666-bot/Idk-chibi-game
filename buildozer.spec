@@ -1,7 +1,7 @@
 [app]
 
 # ============================================================
-# BASIC APP INFORMATION
+# APP INFORMATION
 # ============================================================
 
 title = Chibi Shark Pet
@@ -9,6 +9,8 @@ title = Chibi Shark Pet
 package.name = chibisharkpet
 
 package.domain = org.chibisharkpet
+
+version = 1.0.0
 
 source.dir = .
 
@@ -18,14 +20,23 @@ source.exclude_exts = spec
 
 source.exclude_dirs = .git,.github,bin,.buildozer,__pycache__
 
-version = 1.0.0
+
+# ============================================================
+# PYTHON / KIVY
+# ============================================================
+
+requirements = python3==3.12.9,hostpython3==3.12.9,kivy==2.3.1
 
 
 # ============================================================
-# REQUIREMENTS
+# PYTHON-FOR-ANDROID
 # ============================================================
 
-requirements = python3,kivy
+p4a.fork = kivy
+
+p4a.branch = master
+
+p4a.bootstrap = sdl2
 
 
 # ============================================================
@@ -45,7 +56,7 @@ android.api = 35
 
 android.minapi = 24
 
-android.archs = arm64-v8a, armeabi-v7a
+android.archs = arm64-v8a,armeabi-v7a
 
 android.accept_sdk_license = True
 
@@ -53,65 +64,45 @@ android.allow_backup = True
 
 
 # ============================================================
-# ANDROID PERMISSIONS
+# PERMISSIONS
 # ============================================================
-
-# The current game does not need internet or storage
-# permissions because all assets are packaged inside the APK.
 
 android.permissions =
 
 
 # ============================================================
-# ANDROID APP SETTINGS
+# ANDROID ACTIVITY
 # ============================================================
 
 android.entrypoint = org.kivy.android.PythonActivity
 
-android.presplash_color = #101010
 
-android.adaptive_icon_foreground.filename = %(source.dir)s/assets/town_map.png
+# ============================================================
+# ANDROID BUILD OUTPUT
+# ============================================================
 
-android.adaptive_icon_background.color = #101010
+android.debug_artifact = apk
+
+android.numeric_version = 1
 
 
 # ============================================================
-# PYTHON-FOR-ANDROID
-# ============================================================
-
-p4a.bootstrap = sdl2
-
-
-# ============================================================
-# LOGGING
+# ANDROID LOGGING
 # ============================================================
 
 android.logcat_filters = *:S python:D
 
 
 # ============================================================
-# VERSION CODE
+# SPLASH SCREEN
 # ============================================================
 
-android.numeric_version = 1
-
-
-# ============================================================
-# BUILD SETTINGS
-# ============================================================
-
-# These make the build reproducible without unnecessarily
-# changing the normal Buildozer defaults.
-
-p4a.fork = kivy
+android.presplash_color = #101010
 
 
 # ============================================================
-# WINDOWS / IOS
+# BUILD CONFIGURATION
 # ============================================================
-
-# Not used for this project.
-
 
 [buildozer]
 
